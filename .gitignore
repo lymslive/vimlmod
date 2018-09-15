@@ -1,0 +1,12 @@
+*.pyc
+*.swp
+tags
+*.o
+*.out
+*.bak
+*.log
+*.pod
+core.*
+Session*.vim
+*.gz
+*.tgz
