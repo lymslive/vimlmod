@@ -49,11 +49,16 @@ endfunction
 " #load() mainly to triggle autoload package script.
 " Also a good place for initial code, and is safer when reload.
 function! package#load() abort "{{{
+    if exists('s:__name__')
+        return 1
+    endif
     let s:__name__ = 'package'
     let s:EXPORTOR_FUNC = ['export', 'class', 'package']
     let s:EXPORTOR_NAME = 'EXPORT'
+    let s:EXPORTOR_SID  = '<SID>'
     let s:SLASH = fnamemodify('.', ':p')[-1:]
     let s:scripts = []
+    let s:imported = {}
     let s:mapSID = {}
     let s:EXPORT = {}
     let s:EXPORT.get_sid = function('s:get_sid')
@@ -99,7 +104,7 @@ function! package#import(srcpack, ...) abort "{{{
         endif
     endif
 
-    let l:srcpack = s:try_export(a:srcpack, l:sid)
+    let l:srcpack = s:try_export(a:srcpack, l:sid, a:0)
     return call('s:_import', [l:srcpack, l:sid] + a:000)
 endfunction "}}}
 
@@ -157,7 +162,7 @@ function! package#rimport(basedir, srcpath, ...) abort "{{{
             let l:srcpath = a:srcpath
         endif
     elseif stridx(a:srcpath, '.') >= 0
-        let l:srcpath = substitute(a:srcpath, '\.', s:SLASH, 'g')
+        let l:srcpath = tr(a:srcpath, '.', s:SLASH)
         let l:srcpath = a:basedir . s:SLASH . l:srcpath
         let l:srcpath .= '.vim'
     else 
@@ -170,14 +175,14 @@ function! package#rimport(basedir, srcpath, ...) abort "{{{
         if !filereadable(l:srcpath)
             return s:error('cannot read source script', {})
         endif
-        execute 'source ' . l:srcpath
+        execute 'source ' . fnameescape(l:srcpath)
         let l:sid = s:file_sid(l:srcpath)
         if l:sid <= 0
             return s:error('fials to source script', {})
         endif
     endif
 
-    let l:srcpack = s:try_export('', l:sid)
+    let l:srcpack = s:try_export(l:srcpath, l:sid, a:0)
     return call('s:_import', [l:srcpack, l:sid] + a:000)
 endfunction "}}}
 
@@ -251,7 +256,7 @@ function! s:auto_name(path) abort "{{{
     endif
 
     let l:autopath = strpart(a:path, l:idx + len(l:autoload))
-    let l:autopath = substitute(l:autopath, s:SLASH, '#', 'g')
+    let l:autopath = tr(l:autopath, s:SLASH, '#')
     let l:autopath = substitute(l:autopath, '\.vim$', '', 'g')
     return l:autopath
 endfunction "}}}
@@ -259,11 +264,16 @@ endfunction "}}}
 " try_export: try to call #export(), s:export() ... ect.
 " a:srcpack -- string as autoload name.
 " a:sid -- number as <SID> of the corresponding script.
+" a:noscan -- not try to scan <SNR>_ function
 " expect to return a dict.
-function! s:try_export(srcpack, sid) abort "{{{
-    let l:export = {}
+function! s:try_export(srcpack, sid, noscan) abort "{{{
+    let l:export = get(s:imported, a:srcpack, {})
+    if !empty(l:export)
+        return l:export
+    endif
+
     for l:fun in s:EXPORTOR_FUNC
-        if !empty(a:srcpack)
+        if !empty(a:srcpack) && stridx(a:srcpack, s:SLASH) == -1
             let l:sharp = a:srcpack . '#' . l:fun
             if exists('*' . l:sharp)
                 let l:Funref = function(l:sharp)
@@ -271,19 +281,39 @@ function! s:try_export(srcpack, sid) abort "{{{
             endif
         endif
         if empty(l:export) && !empty(a:sid)
-            let l:private = s:sid_func_name(a:sid, l:fun)
-            if exists('*' . l:private)
-                let l:Funref = function(l:private)
+            let l:Funref = s:name2func(a:sid, '_' . l:fun . '_')
+            if !empty(l:Funref)
                 let l:export = l:Funref()
             endif
         endif
         if !empty(l:export)
-            if type(l:export) == type({}) && has_key(l:export, s:EXPORTOR_NAME)
-                return l:export[s:EXPORTOR_NAME]
-            endif
-            return l:export
+            break
         endif
     endfor
+
+    if empty(l:export) && !a:noscan
+        let l:export = s:funs2map(a:sid, s:scan_import(a:sid))
+    endif
+
+    " try to return the special key in exported dict
+    if type(l:export) == type({}) && has_key(l:export, s:EXPORTOR_NAME)
+        let l:export = l:export[s:EXPORTOR_NAME]
+        if type(l:export) == type([])
+            let l:export = s:funs2map(a:sid, l:export)
+        endif
+    endif
+
+    " <SID> key to import all s: function, it's value is regexp to filter
+    if type(l:export) == type({}) && has_key(l:export, s:EXPORTOR_SID)
+        let l:sidfunc = s:funs2map(a:sid, s:scan_import(a:sid, l:export[s:EXPORTOR_SID]))
+        let l:export = extend(deepcopy(l:export), l:sidfunc)
+        unlet! l:export[s:EXPORTOR_SID]
+    endif
+
+    if !empty(l:export)
+        let s:imported[a:srcpack] = l:export
+    endif
+
     return l:export
 endfunction "}}}
 
@@ -325,15 +355,68 @@ function! s:_import(pack, sid, ...) abort "{{{
         if has_key(a:pack, l:sName)
             let l:export[l:sName] = deepcopy(a:pack[l:sName])
         else
-            let l:private = s:sid_func_name(a:sid, l:sName)
-            if exists('*' . l:private)
-                let l:export[l:sName] = function(l:private)
-            else
-                call s:error('fail to import: ' . l:sName)
+            let l:Funref = s:name2func(a:sid, l:sName)
+            if !empty(l:Funref)
+                let l:export[l:sName] = l:Funref
+                let a:pack[l:sName] = l:Funref
             endif
         endif
     endfor
 
+    return l:export
+endfunction "}}}
+
+" scan_import: scan :function output list, filter the <SNR>_{a:sid}
+" a:sid -- the <SID> number
+" a:1   -- pattern to match private function names
+" return a dict with "EXPORT" key contains a list of function names
+function! s:scan_import(sid, ...) abort "{{{
+    if a:0 == 0 || empty(a:1)
+        let l:pattern = '^[^_]\w\+'
+    else
+        let l:pattern = a:1
+    endif
+
+    let l:sOut = ''
+    try
+        redir => l:sOut
+        silent execute 'function /^[^a-zA-Z]'
+    finally
+        redir END
+    endtry
+    if empty(l:sOut)
+        return {}
+    endif
+
+    let l:funcs = split(l:sOut, "\n")
+    let l:prefix = '<SNR>' . a:sid . '_'
+    call filter(l:funcs, 'v:val =~# l:prefix')
+    let l:select = l:prefix . '\zs\w\+\ze'
+    call map(l:funcs, 'matchstr(v:val, l:select)')
+    call filter(l:funcs, 'v:val =~# l:pattern')
+
+    return l:funcs
+endfunction "}}}
+
+" name2func: 
+function! s:name2func(sid, name) abort "{{{
+    let l:private = printf('<SNR>%d_%s', a:sid, a:name)
+    if exists('*' . l:private)
+        return function(l:private)
+    else
+        return s:error('fail to import: ' . a:name)
+    endif
+endfunction "}}}
+
+" funs2map: 
+function! s:funs2map(sid, names) abort "{{{
+    let l:export = {}
+    for l:sName in a:names
+        let l:Funref = s:name2func(a:sid, l:sName)
+        if !empty(l:Funref)
+            let l:export[l:sName] = l:Funref
+        endif
+    endfor
     return l:export
 endfunction "}}}
 
@@ -389,12 +472,6 @@ function! s:get_sid(package) abort "{{{
     return get(s:mapSID, a:package)
 endfunction "}}}
 
-" sid_func_name: 
-" s: function actually has global name with special prifix.
-function! s:sid_func_name(sid, fun) abort "{{{
-    return printf('<SNR>%d_%s', a:sid, a:fun)
-endfunction "}}}
-
 " file_sid: find SID from full path of script file
 function! s:file_sid(path) abort "{{{
     call s:fresh_script()
@@ -429,3 +506,5 @@ function! Import(...) abort
     return call('package#import', a:0000)
 endfunction
 endif
+
+call package#load()
