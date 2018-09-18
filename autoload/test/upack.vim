@@ -16,15 +16,18 @@ call assert_true(s:PA.hello(), 'fail to import packA')
 
 let s:PAS = package#import('test#packAs')
 call assert_true(s:PAS.hello(), 'fail to import packAs')
+call assert_false(has_key(s:PAS, 'hello2'))
 
 let s:PB = package#import('test#packB')
 call assert_true(s:PB.hello(), 'fail to import packB')
+call assert_true(s:PB.var)
 
 let s:PBS = package#import('test#packBs')
-call assert_true(s:PBS.hello(), 'fail to import packBs')
+call assert_true(s:PBS.hello(), 'fail to import func name in s:EXPORT')
 
 let s:PBE = package#import('test#packBe')
 call assert_true(s:PBE.hello(), 'fail to import packBe')
+call assert_false(has_key(s:PBE, 'private'))
 
 let s:private = package#imports('test#packBe', 'private')
 call assert_true(s:private(), 'fail to import packBe private')

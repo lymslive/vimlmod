@@ -1,5 +1,5 @@
 " package: 
-function! s:package() abort "{{{
+function! s:_package_() abort "{{{
     return s:
 endfunction "}}}
 

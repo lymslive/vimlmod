@@ -37,9 +37,9 @@ in Englist well.
 
 该函数会试图利用待导入的目标源模块中的以下几个函数：
 
-1. `path#to#module#export()` 或其中的 `s:export()`
-1. `path#to#module#class()` 或其中的 `s:class()`
-1. `path#to#module#package()` 或其中的 `s:package()`
+1. `path#to#module#export()` 或其中的 `s:_export_()`
+1. `path#to#module#class()` 或其中的 `s:_class_()`
+1. `path#to#module#package()` 或其中的 `s:_package_()`
 
 将按此顺序调用第一个找到的函数，获取其返回值（一般也应返回字典）。如果没有定义
 所有这些函数，将导入一个空字典；除非还指定了额外参数，则将再度尝试导入与参数名
@@ -105,8 +105,8 @@ endfunction
 `package#import()` 函数，如：
 
 ```vim
-let s:PA = package#import('path#one#module')
-let s:PB = package#import('path#tow#module')
+let PA = package#import('path#one#module')
+let PB = package#import('path#tow#module')
 ```
 
 ### :USE[!] subdir.module [name1, name2 ...]
@@ -115,8 +115,8 @@ let s:PB = package#import('path#tow#module')
 脚本的路径，不是 vim 的当前工作路径，是使用该命令的脚本所在的目录。
 
 并且至少要有一层子目录，否则 `:USE module` 会搜索 `autoload/module.vim` 而不是
-`./module.vim` 。要达成此目的，就要明确使用 `:USE ./module.vim` ，即下面介绍的
-绝对路径引用变量。
+`./module.vim` 。要达成此目的，得在前面多加一个 `:USE .module` ，或下面介绍的
+绝对路径引用变量 `:USE ./module.vim`。
 
 ### :USE[!] /root/path/to/module.vim [name1, name2 ...]
 
@@ -163,7 +163,29 @@ package#import('package')` 。
    间的键拷贝。
 * `package#rimport()` 按相对路径导入模块，需要手动传入基准目录。正因为手动传入
   当前脚本路径是件略麻烦的事，故主导函数 `package#import()` 不能像 `:USE` 命令
-  一样支持相对路径导入。
+  一样支持相对路径导入。但始终可以使用绝对路径。
+
+### let P = package#new(name, [base])
+
+创建一个本地模块管理对象，需指定名字及基准目录，若省去一个参数，则基准目录与名
+字相同。然后此对象就可以用点路径的格式导入相对基准目录的模块：
+
+```vim
+let P = package#new(name, [base])
+let M = P.import('path.to.module', ...)
+```
+
+一个适用场景是在写较大型插件时，将大部分脚本（模块）放在与插件同名的命令空间中
+。如插件 `XYZ`，用 `package#new('XYZ')` 创建的对象，就可直接方便地导入位于
+`autoload/XYZ/` 目录下的模块，以点号分隔路径，且不带 `.vim` 后缀名。
+
+基准目录参数，可含 `#` 部分路径，以管理更深层次的命名空间。当然也可以使用含 `/` 
+的绝对路径，这样就只能在这一个目录下找模块了。在不含 `/` 时，就会在所有 `&rtp`
+中相对 `autoload/` 目录下（再通过基准目录限定子目录）查找模块。
+
+本地对象的 `.import()` 方法与全局的 `package#import()` 用法类似。只是全局方法
+无法用点格式按相对路径导入模块，而创建的创建预存了基准目录，就可用相对路径导入
+模块了。
 
 ## 其他参考
 

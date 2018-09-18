@@ -1,5 +1,5 @@
 " export by s:package
-function! s:package() abort "{{{
+function! s:_package_() abort "{{{
     return s:export
 endfunction "}}}
 

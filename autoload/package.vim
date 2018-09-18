@@ -91,6 +91,9 @@ endfunction "}}}
 " a:000  -- specific symbol name to be imported
 " return -- a dict with key is imported symbols
 function! package#import(srcpack, ...) abort "{{{
+    if stridx(a:srcpack, s:SLASH) >= 0
+        return call('package#rimport', ['', a:srcpack] + a:000)
+    endif
     let l:sid = s:get_sid(a:srcpack)
     if l:sid <= 0
         try
@@ -152,21 +155,23 @@ endfunction "}}}
 " a:basedir -- the base directory
 " a:srcpath -- must has '/' or '.' as path separator, 
 "   when '.' should without '.vim' extention
-"   when '/' should with '.vim' extention
+"   when '/' should with '.vim' extention, and assume absolute path
 " return a dict as package#import()
 function! package#rimport(basedir, srcpath, ...) abort "{{{
+    if stridx(a:srcpath, '#') >= 0
+        return s:error('aotoload #path should use import() instead')
+    endif
     if stridx(a:srcpath, s:SLASH) >= 0
         if a:srcpath =~# '^\.'
             let l:srcpath = a:basedir . s:SLASH . a:srcpath
         else
             let l:srcpath = a:srcpath
         endif
-    elseif stridx(a:srcpath, '.') >= 0
-        let l:srcpath = tr(a:srcpath, '.', s:SLASH)
+    else
+        let l:srcpath = substitute(a:srcpath, '^\.\+', '', 'g')
+        let l:srcpath = tr(l:srcpath, '.', s:SLASH)
         let l:srcpath = a:basedir . s:SLASH . l:srcpath
         let l:srcpath .= '.vim'
-    else 
-        return s:error('relative path muse has slash or dot')
     end
 
     let l:srcpath = resolve(expand(l:srcpath))
@@ -232,6 +237,41 @@ function! package#use(mix, dstpack, srcpack, ...) abort "{{{
     return s:importto(l:dstpack, l:srcpack)
 endfunction "}}}
 command! -nargs=+ -bang USE call package#use(<bang>0, expand('<sfile>:p'), <f-args>)
+
+" Local Class API: {{{1
+" A local package object can custom the base directory for relative import.
+"   let s:P = obj.import('relative.path.to.module')
+" The base directory can be absolute one(with '/'),
+" or relative to autoload/(with '#'),
+" and when empty, in just relative to autoload/.
+
+let s:class = {'base_' : ''}
+function! s:class_import(srcpack, ...) dict abort "{{{
+    if stridx(a:srcpack, '#') >= 0
+        return call('package#import', [a:srcpack] + a:000)
+    elseif stridx(a:srcpack, s:SLASH) >= 0
+        return call('package#rimport', ['', a:srcpack] + a:000)
+    else
+        if stridx(self.base_, s:SLASH) >= 0
+            return call('package#rimport', [self.base_, a:srcpack] + a:000)
+        else
+            let l:srcpack = self.base_ . '#' . a:srcpack
+            let l:srcpack = tr(l:srcpack, '.', '#')
+            let l:srcpack = substitute(l:srcpack, '^#\+', '', 'g')
+            let l:srcpack = substitute(l:srcpack, '##\+', '#', 'g')
+            return call('package#import', [l:srcpack] + a:000)
+        endif
+    endif
+endfunction "}}}
+let s:class.import = function('s:class_import')
+
+function! package#new(name, ...) abort "{{{
+    let l:base = get(a:000, 0, a:name)
+    let l:obj = copy(s:class)
+    let l:obj.base_ = l:base
+    let l:obj.name_ = a:name
+    return l:obj
+endfunction "}}}
 
 " Private Impletement: "{{{1
 " tail_name: the last part of (may full long) package name
@@ -359,6 +399,8 @@ function! s:_import(pack, sid, ...) abort "{{{
             if !empty(l:Funref)
                 let l:export[l:sName] = l:Funref
                 let a:pack[l:sName] = l:Funref
+            else
+                return s:error('fail to import: ' . l:sName)
             endif
         endif
     endfor
@@ -371,7 +413,7 @@ endfunction "}}}
 " a:1   -- pattern to match private function names
 " return a dict with "EXPORT" key contains a list of function names
 function! s:scan_import(sid, ...) abort "{{{
-    if a:0 == 0 || empty(a:1)
+    if a:0 == 0 || empty(a:1) || a:1 == 1
         let l:pattern = '^[^_]\w\+'
     else
         let l:pattern = a:1
@@ -404,7 +446,7 @@ function! s:name2func(sid, name) abort "{{{
     if exists('*' . l:private)
         return function(l:private)
     else
-        return s:error('fail to import: ' . a:name)
+        return 0
     endif
 endfunction "}}}
 
