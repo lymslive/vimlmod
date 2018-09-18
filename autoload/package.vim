@@ -400,7 +400,8 @@ function! s:_import(pack, sid, ...) abort "{{{
                 let l:export[l:sName] = l:Funref
                 let a:pack[l:sName] = l:Funref
             else
-                return s:error('fail to import: ' . l:sName)
+                call s:error('fail to import: ' . l:sName)
+                let l:export[l:sName] = 0
             endif
         endif
     endfor
