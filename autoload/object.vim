@@ -86,7 +86,7 @@ endfunction "}}}
 function! object#new(...) abort "{{{
     let l:obj = copy(s:object)
     for l:base in a:000
-        if type(l:base) = v:t_string
+        if type(l:base) == v:t_string
             let l:base = package#import(l:base)
         endif
         if type(l:base) == v:t_dict
