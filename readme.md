@@ -12,7 +12,7 @@ in English.
 ## 快速安装
 
 核心只是一个文件：`autoload/package.vim`，可以单独下载这个文件，扔到任意一个
-`&rtpp` 目录下的相应位置，如 `~/.vim/autoload/package.vim`，然后使用以下命令激
+`&rtp` 目录下的相应位置，如 `~/.vim/autoload/package.vim`，然后使用以下命令激
 活加载插件（可写入 `vimrc` ）：
 
 ```vim
