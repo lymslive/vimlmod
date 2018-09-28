@@ -1,7 +1,7 @@
 # VimL 脚本模块导入的一种机制实现
 
-Sorry, Englist document is not available now, while the source code is commented
-in Englist.
+Sorry, English document is not available now, while the source code is commented
+in English.
 
 如果将一个 `.vim` 脚本文件视为一个 VimL 语言的模块，则每个模块都有一个独立的作
 用域 `s:` 用以保存该脚本的私有变量与函数。但是对于通用工具类模块，另一个问题是
